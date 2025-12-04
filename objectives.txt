@@ -1,0 +1,29 @@
+1. Upload farmer data and create a user interface for them
+2. Officer's dashboard to monitor activity
+
+Types of fraud detected
+
+1) Ghost Farmers and Fake invoices
+    case 1: Dealers inflate beneficiary lists with fake or non-existent farmers.
+    Subsidies are claimed in their names but never delivered.
+    Dealers generate invoices for supplies that were never delivered.
+    case 2: Paper records show distribution, but farmers never receive inputs.
+
+2) Inflated Input Quantities
+    Farmers are shown as receiving fertilizer or seeds far beyond their actual landholding capacity.
+    Excess stock is diverted to the open market at higher prices.
+
+3) Collusion Among Dealers
+    Groups of dealers within the same region work together to inflate subsidy claims.
+    The resulting patterns show geographically concentrated anomalies, indicating organized networks diverting benefits away from genuine farmers.
+
+4) Misreporting Crop/Season Data
+    Dealers claim subsidies for crops not actually grown or for seasons when no planting occurred.
+    Exploits gaps in monitoring across crop cycles.
+
+5) Price Manipulation
+    Dealers report selling subsidy at official rates but charge farmers market prices.
+    Detection: Farmer-reported payments higher than government-subsidized rates.
+
+
+
