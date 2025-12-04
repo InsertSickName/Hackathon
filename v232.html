@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Agricultural Subsidy Leakage Detector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/spectre.css/dist/spectre.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/spectre.css/dist/spectre-exp.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/spectre.css/dist/spectre-icons.min.css">
+
+  <style>
+    :root {
+      --accent: #2b7a78;
+      --accent-dark: #205b5e;
+      --bg: #f6f7f9;
+      --text: #1f2937;
+    }
+    body { background: var(--bg); color: var(--text); }
+    .navbar { background: white; border-bottom: 1px solid #e6e8eb; }
+    .brand { color: var(--accent); font-weight: 700; }
+    .container { max-width: 1200px; padding: 1rem; }
+    .card { border: 1px solid #e6e8eb; }
+    .kpi { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .kpi .card { background: white; }
+    .kpi-value { font-size: 1.5rem; font-weight: 700; }
+    .kpi-label { color: #6b7280; font-size: 0.9rem; }
+    .grid-2 { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; margin-top: 12px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px; }
+    #map { height: 420px; border-radius: 6px; border: 1px solid #e6e8eb; }
+
+    /* ------------------------------ */
+    /* FIXED PART: make charts larger */
+    /* ------------------------------ */
+    canvas {
+      min-height: 340px !important;
+      height: 380px !important;
+    }
+    /* ------------------------------ */
+
+    .chip { background: #eef7f6; color: var(--accent-dark); padding: 4px 8px; border-radius: 16px; }
+    .badge-danger { background: #ffe6e6; color: #b91c1c; }
+    .badge-warning { background: #fff5e6; color: #b45309; }
+    .badge-success { background: #eafff2; color: #166534; }
+    .note { color: #6b7280; font-size: 0.85rem; }
+    .sticky { position: sticky; top: 0; background: white; z-index: 5; }
+    table { width: 100%; }
+    .table tbody tr:hover { background: #f9fafb; }
+
+    /* NEW STYLES for the relocated cards */
+    .top-row-container {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr; /* Overview: Left side, New cards: Right side */
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    .right-info-cards {
+        display: grid;
+        grid-template-rows: 1fr 1fr; /* Stack the two new cards vertically */
+        gap: 12px;
+    }
+    .right-info-cards .card {
+        display: flex; /* Make card content take up full space */
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        min-height: 120px; /* Ensure they have a decent size */
+    }
+    .right-info-cards a {
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: var(--accent);
+        text-decoration: none;
+        cursor: pointer;
+    }
+    /* Modal styles to match theme */
+    .modal.active .modal-container {
+        max-width: 500px;
+    }
+    .modal-header {
+        background: var(--accent);
+        color: white;
+        border-bottom: none;
+    }
+    .modal-title {
+        color: white;
+    }
+    .modal-body .note {
+        padding-top: 10px;
+        border-top: 1px solid #e6e8eb;
+    }
+  </style>
+</head>
+<body>
+  <header class="navbar">
+    <section class="navbar-section container">
+      <span class="brand">Agri Subsidy Leakage Detector</span>
+    </section>
+  </header>
+
+  <main class="container">
+    <div class="columns">
+      <div class="column col-12"> <div class="top-row-container">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title h5">Overview</div>
+                <div class="card-subtitle text-gray">
+                  Detect anomalous subsidy distribution patterns across dealers, beneficiaries, seasons, and geographies.
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="kpi" id="kpi">
+                  <div class="card p-2">
+                    <div class="kpi-value" id="kpiTransactions">0</div>
+                    <div class="kpi-label">Transactions</div>
+                  </div>
+                  <div class="card p-2">
+                    <div class="kpi-value" id="kpiBeneficiaries">0</div>
+                    <div class="kpi-label">Unique beneficiaries</div>
+                  </div>
+                  <div class="card p-2">
+                    <div class="kpi-value" id="kpiDealers">0</div>
+                    <div class="kpi-label">Dealers</div>
+                  </div>
+                  <div class="card p-2">
+                    <div class="kpi-value" id="kpiAnomalies">0</div>
+                    <div class="kpi-label">Flagged anomalies</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <div class="right-info-cards">
+                <div class="card">
+                    <div class="card-title h6">Detection Details</div>
+                    <a href="https://docs.google.com/document/d/ANOMALY_DETECTION_DOC_ID/edit" target="_blank" onclick="handleAnomalyLink(event)">How anomalies are detected?</a>
+                </div>
+                <div class="card">
+                    <div class="card-title h6">Process Steps</div>
+                    <a href="https://docs.google.com/document/d/WORKFLOW_DOC_ID/edit" target="_blank" onclick="handleWorkflowLink(event)">Workflow</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card p-2">
+            <canvas id="chartDealerVolume"></canvas>
+          </div>
+          <div class="card p-2">
+            <canvas id="chartAnomalyTypes"></canvas>
+          </div>
+        </div>
+        
+        <div class="grid-2">
+          <div class="card p-2">
+            <div class="h6">Geospatial clusters</div>
+            <div id="map"></div>
+            <div class="note mt-2">
+              Circles indicate transaction density; red markers are cluster anomalies.
+            </div>
+          </div>
+          <div class="card p-2">
+            <div class="h6">Filters</div>
+            <div class="form-group">
+              <label class="form-label">Scheme</label>
+              <select id="filterScheme" class="form-select">
+                <option value="">All</option>
+                <option value="Fertilizer">Fertilizer</option>
+                <option value="Seeds">Seeds</option>
+                <option value="Equipment">Equipment</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Season</label>
+              <select id="filterSeason" class="form-select">
+                <option value="">All</option>
+                <option value="Kharif">Kharif</option>
+                <option value="Rabi">Rabi</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">District</label>
+              <input id="filterDistrict" class="form-input" placeholder="e.g., Belagavi" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Anomaly severity</label>
+              <select id="filterSeverity" class="form-select">
+                <option value="">All</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" id="applyFilters">Apply filters</button>
+            <button class="btn" id="resetFilters">Reset</button>
+            <div class="divider"></div>
+            <button class="btn btn-link" id="downloadReport">Download anomalies CSV</button>
+            <span class="chip" id="chipActiveFilters">No filters</span>
+          </div>
+        </div>
+
+        <div class="card mt-2">
+          <div class="card-header">
+            <div class="card-title h6">Flagged anomalies</div>
+            <div class="card-subtitle text-gray">Sorted by severity and score</div>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-striped" id="anomalyTable">
+                <thead class="sticky">
+                  <tr>
+                    <th>Severity</th>
+                    <th>Score</th>
+                    <th>Type</th>
+                    <th>Dealer</th>
+                    <th>Beneficiary</th>
+                    <th>Scheme</th>
+                    <th>Season</th>
+                    <th>District</th>
+                    <th>Qty</th>
+                    <th>Land (acre)</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-3">
+          <div class="card p-2">
+            <div class="h6">Dealer drilldown</div>
+            <div class="form-group">
+              <input id="dealerSearch" class="form-input" placeholder="Search dealer by name or ID" />
+            </div>
+            <div id="dealerInfo"></div>
+          </div>
+          <div class="card p-2">
+            <div class="h6">Beneficiary drilldown</div>
+            <div class="form-group">
+              <input id="beneficiarySearch" class="form-input" placeholder="Search beneficiary by name or ID" />
+            </div>
+            <div id="beneficiaryInfo"></div>
+          </div>
+          <div class="card p-2">
+            <div class="h6">Upload data</div>
+            <p class="note">Upload CSV with columns: transactionId,dealerId,dealerName,beneficiaryId,beneficiaryName,scheme,season,district,quantity,landHolding,lat,lon,date</p>
+            <input type="file" id="fileInput" accept=".csv" />
+            <div class="divider"></div>
+            <button class="btn" id="loadSample">Load sample dataset</button>
+          </div>
+        </div>
+
+        <div class="footer">
+          Built for transparency and accountability in agricultural subsidy distribution.
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="modal" id="infoModal">
+    <a href="#close" class="modal-overlay" aria-label="Close" onclick="closeModal(event)"></a>
+    <div class="modal-container">
+      <div class="modal-header">
+        <a href="#close" class="btn btn-clear float-right" aria-label="Close" onclick="closeModal(event)"></a>
+        <div class="modal-title h5" id="modalTitle"></div>
+      </div>
+      <div class="modal-body">
+        <div class="content" id="modalContent">
+          </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeModal(event)">Close</button>
+      </div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <script>
+    // ---------------------------
+    // Custom Modal Functions
+    // ---------------------------
+    function openModal(title, htmlContent) {
+        document.getElementById("modalTitle").innerText = title;
+        document.getElementById("modalContent").innerHTML = htmlContent;
+        document.getElementById("infoModal").classList.add("active");
+    }
+
+    function closeModal(event) {
+        event.preventDefault();
+        document.getElementById("infoModal").classList.remove("active");
+    }
+
+    // ---------------------------
+    // Link Click Handlers
+    // ---------------------------
+    function handleAnomalyLink(event) {
+        const placeholder = "ANOMALY_DETECTION_DOC_ID";
+        if (event.currentTarget.href.includes(placeholder)) {
+            event.preventDefault(); 
+            const htmlContent = `
+                <ul>
+                    <li><span class="chip">Dealer outliers</span> Dealers far above regional average volumes (z-score > threshold).</li>
+                    <li><span class="chip">Quantity vs. land</span> Quantity exceeds rule-of-thumb caps per acre by scheme.</li>
+                    <li><span class="chip">Geo clusters</span> Dense, temporally tight claims suggesting coordination.</li>
+                </ul>
+                <p class="note">These are heuristic signals for triage, not proof. Use with audits and field verification.</p>
+            `;
+            openModal("How anomalies are detected?", htmlContent);
+        }
+        // If the placeholder is replaced with a real URL, the default action (opening the link) will proceed.
+    }
+
+    function handleWorkflowLink(event) {
+        const placeholder = "WORKFLOW_DOC_ID";
+        if (event.currentTarget.href.includes(placeholder)) {
+            event.preventDefault(); 
+            const htmlContent = `
+                <ol>
+                    <li><b>Upload:</b> Load CSV or use sample data.</li>
+                    <li><b>Filter:</b> Narrow by scheme, season, district, severity.</li>
+                    <li><b>Investigate:</b> Drill down by dealer or beneficiary.</li>
+                    <li><b>Export:</b> Download anomaly list for audit.</li>
+                </ol>
+            `;
+            openModal("Workflow", htmlContent);
+        }
+        // If the placeholder is replaced with a real URL, the default action (opening the link) will proceed.
+    }
+
+    // ---------------------------
+    // Data model
+    // ---------------------------
+    let transactions = [];
+    let anomalies = [];
+    let filteredAnomalies = [];
+    let dealerStats = new Map();
+    let charts = {};
+    let map, markersLayer;
+
+    const schemeCapsPerAcre = {
+      Fertilizer: 1.5,
+      Seeds: 12,
+      Equipment: 0.2
+    };
+
+    // ---------------------------
+    // Sample data generator
+    // ---------------------------
+    function makeSampleData(rows = 800) {
+      const districts = ["Belagavi","Bidar","Ballari","Haveri","Kalaburagi","Mysuru","Mandya","Tumakuru","Dharwad","Koppal"];
+      const dealers = Array.from({length: 25}, (_,i)=>({
+        dealerId: "D"+String(i+1).padStart(3,"0"),
+        dealerName: "Dealer "+(i+1),
+        district: districts[Math.floor(Math.random()*districts.length)]
+      }));
+      const beneficiaries = Array.from({length: 300}, (_,i)=>({
+        beneficiaryId: "B"+String(i+1).padStart(4,"0"),
+        beneficiaryName: "Farmer "+(i+1),
+        landHolding: +(Math.random()*6+0.5).toFixed(2)
+      }));
+
+      const schemes = ["Fertilizer","Seeds","Equipment"];
+      const seasons = ["Kharif","Rabi"];
+      const baseLat = 15.0, baseLon = 75.0;
+
+      const data = [];
+      for (let i=0;i<rows;i++){
+        const d = dealers[Math.floor(Math.random()*dealers.length)];
+        const b = beneficiaries[Math.floor(Math.random()*beneficiaries.length)];
+        const scheme = schemes[Math.floor(Math.random()*schemes.length)];
+        const season = seasons[Math.floor(Math.random()*seasons.length)];
+        const district = d.district;
+        const cap = schemeCapsPerAcre[scheme];
+        const qty = +(b.landHolding * cap * (Math.random()*1.2+0.6)).toFixed(2);
+        let qtyAdj = qty;
+        if (Math.random() < 0.08) qtyAdj = +(qty * (Math.random()*2+1.8)).toFixed(2);
+        const lat = +(baseLat + (Math.random()-0.5)*4).toFixed(4);
+        const lon = +(baseLon + (Math.random()-0.5)*4).toFixed(4);
+        const date = randomDateInSeason(season);
+        data.push({
+          transactionId: "T"+String(i+1).padStart(5,"0"),
+          dealerId: d.dealerId,
+          dealerName: d.dealerName,
+          beneficiaryId: b.beneficiaryId,
+          beneficiaryName: b.beneficiaryName,
+          scheme, season, district,
+          quantity: qtyAdj,
+          landHolding: b.landHolding,
+          lat, lon, date
+        });
+      }
+
+      const highDealer = dealers[0].dealerId;
+      for (let k=0;k<100;k++){
+        const b = beneficiaries[Math.floor(Math.random()*beneficiaries.length)];
+        data.push({
+          transactionId: "T"+String(rows+k+1).padStart(5,"0"),
+          dealerId: highDealer,
+          dealerName: "Dealer 1",
+          beneficiaryId: b.beneficiaryId,
+          beneficiaryName: b.beneficiaryName,
+          scheme: "Fertilizer",
+          season: "Kharif",
+          district: dealers[0].district,
+          quantity: +(b.landHolding * schemeCapsPerAcre["Fertilizer"] * (Math.random()*1.1+0.9)).toFixed(2),
+          landHolding: b.landHolding,
+          lat: +(baseLat + (Math.random()-0.5)*1.5).toFixed(4),
+          lon: +(baseLon + (Math.random()-0.5)*1.5).toFixed(4),
+          date: randomDateInSeason("Kharif")
+        });
+      }
+
+      const clusterCenter = {lat: baseLat+0.8, lon: baseLon+0.7};
+      const clusterDate = new Date("2025-07-15");
+      for (let m=0;m<60;m++){
+        const b = beneficiaries[Math.floor(Math.random()*beneficiaries.length)];
+        data.push({
+          transactionId: "T"+String(rows+100+m+1).padStart(5,"0"),
+          dealerId: "D010",
+          dealerName: "Dealer 10",
+          beneficiaryId: b.beneficiaryId,
+          beneficiaryName: b.beneficiaryName,
+          scheme: "Seeds",
+          season: "Kharif",
+          district: "Mandya",
+          quantity: +(b.landHolding * schemeCapsPerAcre["Seeds"] * (Math.random()*0.6+1.4)).toFixed(2),
+          landHolding: b.landHolding,
+          lat: +(clusterCenter.lat + (Math.random()-0.5)*0.12).toFixed(4),
+          lon: +(clusterCenter.lon + (Math.random()-0.5)*0.12).toFixed(4),
+          date: clusterDate.toISOString().slice(0,10)
+        });
+      }
+      return data;
+    }
+
+    function randomDateInSeason(season){
+      const ranges = {
+        Kharif: ["2025-06-01","2025-10-31"],
+        Rabi: ["2025-11-01","2026-03-15"]
+      };
+      const [start,end] = ranges[season];
+      const s = new Date(start).getTime();
+      const e = new Date(end).getTime();
+      const t = s + Math.random()*(e-s);
+      return new Date(t).toISOString().slice(0,10);
+    }
+
+    // ---------------------------
+    // CSV parsing
+    // ---------------------------
+    function parseCSV(text){
+      const lines = text.trim().split(/\r?\n/);
+      const header = lines[0].split(",").map(h=>h.trim());
+      const rows = [];
+      for (let i=1;i<lines.length;i++){
+        const cols = splitCSVLine(lines[i]);
+        const obj = {};
+        header.forEach((h,idx)=>{ obj[h] = cols[idx] ?? ""; });
+        obj.quantity = +obj.quantity;
+        obj.landHolding = +obj.landHolding;
+        obj.lat = +obj.lat;
+        obj.lon = +obj.lon;
+        rows.push(obj);
+      }
+      return rows;
+    }
+
+    function splitCSVLine(line){
+      const result = [];
+      let current = "";
+      let inQuotes = false;
+      for (let i=0;i<line.length;i++){
+        const c = line[i];
+        if (c === '"'){
+          if (inQuotes && line[i+1] === '"'){ current += '"'; i++; }
+          else { inQuotes = !inQuotes; }
+        } else if (c === ',' && !inQuotes){
+          result.push(current); current = "";
+        } else { current += c; }
+      }
+      result.push(current);
+      return result.map(s=>s.trim());
+    }
+
+    // ---------------------------
+    // Anomaly detection
+    // ---------------------------
+    function computeDealerStats(data){
+      dealerStats = new Map();
+      const byDealer = new Map();
+      data.forEach(tx=>{
+        const k = tx.dealerId;
+        if (!byDealer.has(k)) byDealer.set(k, []);
+        byDealer.get(k).push(tx);
+      });
+
+      const districtDealerVolumes = new Map();
+      data.forEach(tx=>{
+        const k = `${tx.district}:${tx.dealerId}`;
+        districtDealerVolumes.set(k, (districtDealerVolumes.get(k)||0)+1);
+      });
+
+      const districtStats = new Map();
+      const districtToDealerVolumes = new Map();
+      districtDealerVolumes.forEach((vol, key)=>{
+        const [dist] = key.split(":");
+        if (!districtToDealerVolumes.has(dist)) districtToDealerVolumes.set(dist, []);
+        districtToDealerVolumes.get(dist).push(vol);
+      });
+      districtToDealerVolumes.forEach((list, dist)=>{
+        const mean = list.reduce((a,b)=>a+b,0)/list.length;
+        const sd = Math.sqrt(list.reduce((acc,v)=> acc + Math.pow(v-mean,2),0)/list.length);
+        districtStats.set(dist, {mean, sd});
+      });
+
+      byDealer.forEach((list, dealerId)=>{
+        const dist = list[0].district;
+        const vol = list.length;
+        const {mean, sd} = districtStats.get(dist) || {mean: 0, sd: 0.0001};
+        const z = sd ? (vol - mean)/sd : 0;
+        dealerStats.set(dealerId, {dealerId, dealerName: list[0].dealerName, district: dist, volume: vol, zscore: z});
+      });
+    }
+
+    function detectAnomalies(data){
+      anomalies = [];
+      computeDealerStats(data);
+
+      const dealerZThreshold = 2.0;
+
+      data.forEach(tx=>{
+        const caps = schemeCapsPerAcre[tx.scheme] || 0;
+        const capQty = tx.landHolding * caps;
+        const exceedRatio = (capQty > 0) ? tx.quantity / capQty : 0;
+        if (exceedRatio > 1.3){
+          const score = Math.min(100, 40 + (exceedRatio-1.3)*40);
+          anomalies.push(makeAnomaly(tx, "QuantityVsLand", score, severityFromScore(score)));
+        }
+      });
+
+      dealerStats.forEach(stat=>{
+        if (stat.zscore > dealerZThreshold){
+          const dealerTx = data.filter(t=>t.dealerId === stat.dealerId);
+          dealerTx.slice(0, Math.min(30, dealerTx.length)).forEach(tx=>{
+            const score = Math.min(100, 60 + (stat.zscore-2.0)*15);
+            anomalies.push(makeAnomaly(tx, "DealerVolumeOutlier", score, severityFromScore(score), {zscore: stat.zscore, volume: stat.volume}));
+          });
+        }
+      });
+
+      const radiusKm = 10;
+      const windowDays = 7;
+      const points = data.map(tx=>({lat: tx.lat, lon: tx.lon, date: new Date(tx.date), tx}));
+      const clusters = findClusters(points, radiusKm, windowDays, 12);
+      clusters.forEach(cluster=>{
+        cluster.points.forEach(p=>{
+          const score = Math.min(100, 50 + (cluster.points.length-12)*3);
+          anomalies.push(makeAnomaly(p.tx, "GeoTemporalCluster", score, severityFromScore(score), {clusterSize: cluster.points.length}));
+        });
+      });
+
+      anomalies.sort((a,b)=>{
+        const sOrder = {"High":3,"Medium":2,"Low":1};
+        if (sOrder[b.severity] !== sOrder[a.severity]) return sOrder[b.severity] - sOrder[a.severity];
+        return b.score - a.score;
+      });
+
+      filteredAnomalies = anomalies.slice();
+    }
+
+    function makeAnomaly(tx, type, score, severity, extra={}){
+      return {
+        severity,
+        score: Math.round(score),
+        type,
+        dealer: `${tx.dealerName} (${tx.dealerId})`,
+        beneficiary: `${tx.beneficiaryName} (${tx.beneficiaryId})`,
+        scheme: tx.scheme,
+        season: tx.season,
+        district: tx.district,
+        quantity: tx.quantity,
+        landHolding: tx.landHolding,
+        lat: tx.lat, lon: tx.lon,
+        date: tx.date,
+        meta: extra
+      };
+    }
+
+    function severityFromScore(score){
+      if (score >= 75) return "High";
+      if (score >= 55) return "Medium";
+      return "Low";
+    }
+
+    function distanceKm(a,b){
+      const R = 6371;
+      const dLat = (b.lat - a.lat) * Math.PI/180;
+      const dLon = (b.lon - a.lon) * Math.PI/180;
+      const lat1 = a.lat * Math.PI/180;
+      const lat2 = b.lat * Math.PI/180;
+      const x = Math.sin(dLat/2)**2 + Math.sin(dLon/2)**2 * Math.cos(lat1) * Math.cos(lat2);
+      return 2 * R * Math.asin(Math.sqrt(x));
+    }
+
+    function daysBetween(a,b){ return Math.abs((b - a) / (1000*60*60*24)); }
+
+    function findClusters(points, radiusKm, windowDays, minPts){
+      const visited = new Set();
+      const clusters = [];
+      for (let i=0;i<points.length;i++){
+        if (visited.has(i)) continue;
+        const neighbors = [];
+        for (let j=0;j<points.length;j++){
+          if (i===j) continue;
+          if (distanceKm(points[i], points[j]) <= radiusKm && daysBetween(points[i].date, points[j].date) <= windowDays){
+            neighbors.push(j);
+          }
+        }
+        if (neighbors.length + 1 >= minPts){
+          const clusterIdx = new Set([i, ...neighbors]);
+          clusterIdx.forEach(idx=> visited.add(idx));
+          clusters.push({points: Array.from(clusterIdx).map(idx=>points[idx])});
+        }
+      }
+      return clusters;
+    }
+
+    // ---------------------------
+    // UI rendering
+    // ---------------------------
+    function renderAll(){
+      document.getElementById("kpiTransactions").innerText = transactions.length.toLocaleString();
+      const beneficiaries = new Set(transactions.map(t=>t.beneficiaryId));
+      document.getElementById("kpiBeneficiaries").innerText = beneficiaries.size.toLocaleString();
+      const dealers = new Set(transactions.map(t=>t.dealerId));
+      document.getElementById("kpiDealers").innerText = dealers.size.toLocaleString();
+      document.getElementById("kpiAnomalies").innerText = anomalies.length.toLocaleString();
+
+      renderCharts();
+      renderMap();
+      renderAnomalyTable();
+    }
+
+    // --- UPDATED to use filteredAnomalies for charts ---
+    function renderCharts(){
+      const ctx1 = document.getElementById("chartDealerVolume");
+      const ctx2 = document.getElementById("chartAnomalyTypes");
+
+      // 1. Dealer Volume Chart (Bar Chart) - Now uses filtered anomalies
+      const dealerAnomalyVolume = groupBy(filteredAnomalies, a => a.dealer);
+      const dealerAnomalyStats = Object.entries(dealerAnomalyVolume).map(([dealer, list]) => ({
+          dealer: dealer,
+          volume: list.length
+      }));
+
+      const volumes = dealerAnomalyStats
+        .sort((a,b)=>b.volume-a.volume)
+        .slice(0, 12);
+
+      const labels1 = volumes.map(v=>v.dealer.split('(')[0].trim());
+      const data1 = volumes.map(v=>v.volume);
+      const avgVolume = average(data1); 
+
+      if (charts.dealer) charts.dealer.destroy();
+      charts.dealer = new Chart(ctx1, {
+        type: 'bar',
+        data: {
+          labels: labels1,
+          datasets: [{
+            label: 'Anomalies by dealer (filtered)',
+            data: data1,
+            backgroundColor: data1.map(v=> 
+              v > (avgVolume*1.4) ? 'rgba(220,38,38,0.6)' : 'rgba(43,122,120,0.6)'
+            )
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+
+      // 2. Anomaly Types Chart (Doughnut Chart) - Now uses filtered anomalies
+      const typeCounts = {};
+      filteredAnomalies.forEach(a=> typeCounts[a.type] = (typeCounts[a.type]||0)+1);
+      const labels2 = Object.keys(typeCounts);
+      const data2 = Object.values(typeCounts);
+
+      if (charts.types) charts.types.destroy();
+      charts.types = new Chart(ctx2, {
+        type: 'doughnut',
+        data: {
+          labels: labels2,
+          datasets: [{
+            data: data2,
+            backgroundColor: ['#ef4444','#f59e0b','#3b82f6','#10b981','#8b5cf6']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom' } }
+        }
+      });
+    }
+    // --------------------------------------------------------------
+
+    // --- UPDATED to use filteredAnomalies for map data AND fit view to bounds ---
+    function renderMap(){
+      if (!map){
+        // Initial map setup (only runs once)
+        map = L.map('map').setView([15.5, 75.5], 7);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+      }
+      if (markersLayer) markersLayer.clearLayers();
+      markersLayer = L.layerGroup().addTo(map);
+
+      // Map circles/density now represents the density of filtered anomalies
+      const byDistrict = groupBy(filteredAnomalies, a=>a.district);
+      
+      Object.entries(byDistrict).forEach(([dist, list])=>{
+        const coords = centroid(list.map(l=>({lat:l.lat, lon:l.lon})));
+        if (!isFinite(coords.lat) || !isFinite(coords.lon)) return;
+        
+        const anomalyCount = list.length;
+        
+        // Coloring and sizing based on filtered anomaly count
+        const color = anomalyCount > 50 ? '#dc2626' : (anomalyCount > 20 ? '#f59e0b' : '#2b7a78');
+        const radius = Math.min(30000, 8000 + anomalyCount*150);
+
+        const circle = L.circle([coords.lat, coords.lon], {
+          color, fillColor: color, fillOpacity: 0.3, radius
+        });
+        circle.addTo(markersLayer);
+      });
+
+      // Cluster markers use filtered anomalies
+      const clusterAnoms = filteredAnomalies.filter(a=>a.type==="GeoTemporalCluster");
+      clusterAnoms.slice(0,300).forEach(a=>{
+        const m = L.circleMarker([a.lat, a.lon], {
+          radius: 5, color: '#b91c1c', fillColor: '#b91c1c', fillOpacity: 0.7
+        });
+        m.addTo(markersLayer);
+      });
+      
+      // NEW LOGIC: Adjust map view to fit the filtered anomaly data
+      if (filteredAnomalies.length > 0) {
+        // Collect coordinates of all filtered anomalies
+        const latLngs = filteredAnomalies.map(a => [a.lat, a.lon]);
+        const bounds = L.latLngBounds(latLngs);
+        // Fit map to the calculated bounds with some padding
+        map.fitBounds(bounds, {padding: [50, 50], maxZoom: 9});
+      } else {
+         // If no anomalies are filtered, reset view to a default area
+         map.setView([15.5, 75.5], 7);
+      }
+    }
+
+    function renderAnomalyTable(){
+      const tbody = document.querySelector("#anomalyTable tbody");
+      tbody.innerHTML = "";
+      filteredAnomalies.forEach(a=>{
+        const tr = document.createElement("tr");
+        const badgeClass =
+          a.severity === "High" ? "badge badge-danger" :
+          a.severity === "Medium" ? "badge badge-warning" :
+          "badge badge-success";
+        tr.innerHTML = `
+          <td><span class="${badgeClass}">${a.severity}</span></td>
+          <td>${a.score}</td>
+          <td>${a.type}</td>
+          <td>${a.dealer}</td>
+          <td>${a.beneficiary}</td>
+          <td>${a.scheme}</td>
+          <td>${a.season}</td>
+          <td>${a.district}</td>
+          <td>${a.quantity}</td>
+          <td>${a.landHolding}</td>
+          <td>${a.date}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function average(arr){ return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+
+    function groupBy(arr, fn){
+      const map = {};
+      arr.forEach(item=>{
+        const k = fn(item);
+        if (!map[k]) map[k] = [];
+        map[k].push(item);
+      });
+      return map;
+    }
+
+    function centroid(points){
+      if (!points.length) return {lat: NaN, lon: NaN};
+      const lat = average(points.map(p=>p.lat));
+      const lon = average(points.map(p=>p.lon));
+      return {lat, lon};
+    }
+
+    // ---------------------------
+    // Filters - Calls renderCharts() and renderMap() to update visualizations
+    // ---------------------------
+    function applyFilters(){
+      const scheme = document.getElementById("filterScheme").value;
+      const season = document.getElementById("filterSeason").value;
+      const district = document.getElementById("filterDistrict").value.trim().toLowerCase();
+      const severity = document.getElementById("filterSeverity").value;
+
+      filteredAnomalies = anomalies.filter(a=>{
+        if (scheme && a.scheme !== scheme) return false;
+        if (season && a.season !== season) return false;
+        if (severity && a.severity !== severity) return false;
+        if (district && a.district.toLowerCase().indexOf(district) === -1) return false;
+        return true;
+      });
+
+      renderAnomalyTable();
+      renderCharts(); 
+      renderMap();    
+
+      const labels = [];
+      if (scheme) labels.push(`Scheme: ${scheme}`);
+      if (season) labels.push(`Season: ${season}`);
+      if (severity) labels.push(`Severity: ${severity}`);
+      if (district) labels.push(`District: ${district}`);
+      document.getElementById("chipActiveFilters").innerText = labels.length ? labels.join(" | ") : "No filters";
+    }
+
+    function resetFilters(){
+      document.getElementById("filterScheme").value = "";
+      document.getElementById("filterSeason").value = "";
+      document.getElementById("filterDistrict").value = "";
+      document.getElementById("filterSeverity").value = "";
+      filteredAnomalies = anomalies.slice();
+      renderAnomalyTable();
+      renderCharts(); 
+      renderMap();    
+      document.getElementById("chipActiveFilters").innerText = "No filters";
+    }
+
+    function downloadCSV(filename, rows){
+      const header = ["severity","score","type","dealer","beneficiary","scheme","season","district","quantity","landHolding","lat","lon","date"];
+      const csv = [header.join(",")]
+        .concat(rows.map(r=> header.map(h=> `"${String(r[h] ?? "").replace(/"/g,'""')}"`).join(",")))
+        .join("\n");
+      const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+    }
+
+    function renderDealerInfo(query){
+      const container = document.getElementById("dealerInfo");
+      if (!query){ container.innerHTML = "<p class='note'>Enter a dealer name or ID.</p>"; return; }
+      const matches = transactions.filter(t=> (t.dealerId.toLowerCase().includes(query) || t.dealerName.toLowerCase().includes(query)));
+      if (!matches.length){ container.innerHTML = "<p class='note'>No matching dealer found.</p>"; return; }
+      const dId = matches[0].dealerId;
+      const stat = dealerStats.get(dId);
+      const count = matches.length;
+      const anoms = anomalies.filter(a=> a.dealer.indexOf(dId) !== -1);
+      const schemes = Object.entries(groupBy(matches, m=>m.scheme)).map(([k,v])=> `${k} (${v.length})`).join(", ");
+      container.innerHTML = `
+        <div><b>${stat?.dealerName || matches[0].dealerName}</b> (${dId})</div>
+        <div>District: ${stat?.district || matches[0].district}</div>
+        <div>Transactions: ${count} | Anomalies: ${anoms.length} | Z-score: ${stat ? stat.zscore.toFixed(2) : "-"}</div>
+        <div>Schemes: ${schemes}</div>
+      `;
+    }
+
+    function renderBeneficiaryInfo(query){
+      const container = document.getElementById("beneficiaryInfo");
+      if (!query){ container.innerHTML = "<p class='note'>Enter a beneficiary name or ID.</p>"; return; }
+      const matches = transactions.filter(t=> (t.beneficiaryId.toLowerCase().includes(query) || t.beneficiaryName.toLowerCase().includes(query)));
+      if (!matches.length){ container.innerHTML = "<p class='note'>No matching beneficiary found.</p>"; return; }
+      const bId = matches[0].beneficiaryId;
+      const count = matches.length;
+      const land = matches[0].landHolding;
+      const anoms = anomalies.filter(a=> a.beneficiary.indexOf(bId) !== -1);
+      const dealers = Object.entries(groupBy(matches, m=>m.dealerName)).map(([k,v])=> `${k} (${v.length})`).join(", ");
+      container.innerHTML = `
+        <div><b>${matches[0].beneficiaryName}</b> (${bId})</div>
+        <div>Land holding: ${land} acres</div>
+        <div>Transactions: ${count} | Anomalies: ${anoms.length}</div>
+        <div>Dealers: ${dealers}</div>
+      `;
+    }
+
+    // ---------------------------
+    // Event wiring
+    // ---------------------------
+    document.getElementById("applyFilters").addEventListener("click", applyFilters);
+    document.getElementById("resetFilters").addEventListener("click", resetFilters);
+
+    document.getElementById("downloadReport").addEventListener("click", ()=>{
+      if (!filteredAnomalies.length) return alert("No anomalies to export.");
+      downloadCSV("anomalies.csv", filteredAnomalies);
+    });
+
+    document.getElementById("dealerSearch").addEventListener("input", (e)=>{
+      const q = e.target.value.trim().toLowerCase();
+      renderDealerInfo(q);
+    });
+
+    document.getElementById("beneficiarySearch").addEventListener("input", (e)=>{
+      const q = e.target.value.trim().toLowerCase();
+      renderBeneficiaryInfo(q);
+    });
+
+    document.getElementById("fileInput").addEventListener("change", async (e)=>{
+      const file = e.target.files[0];
+      if (!file) return;
+      const text = await file.text();
+      transactions = parseCSV(text);
+      detectAnomalies(transactions);
+      renderAll();
+      resetFilters();
+    });
+
+    document.getElementById("loadSample").addEventListener("click", ()=>{
+      transactions = makeSampleData(800);
+      detectAnomalies(transactions);
+      renderAll();
+      resetFilters();
+    });
+
+    window.addEventListener("load", ()=>{
+      transactions = makeSampleData(800);
+      detectAnomalies(transactions);
+      renderAll();
+      renderDealerInfo("");
+      renderBeneficiaryInfo("");
+    });
+  </script>
+</body>
+</html>
